@@ -780,6 +780,119 @@ def main():
                 if 'summary' in plots:
                     st.subheader("Performance Summary")
                     st.pyplot(plots['summary'])
+    
+    elif app_mode == "Team Comparison":
+        st.header("Team Comparison")
+        
+        if not st.session_state.data_loaded:
+            st.warning("Please upload data first or use sample data on the Upload Data page.")
+            return
+        
+        # Add an expander with explanation of the team comparison
+        with st.expander("About Team Comparison"):
+            st.markdown("""
+            This page compares the performance of two teams based on aggregated GPS data from their players.
+            
+            **Features:**
+            - **Aggregate Team Metrics**: Summary table of total and average metrics for each team.
+            - **Player Metric Distributions**: Box plots showing the distribution of key metrics across players.
+            - **Team Position Heatmaps**: Visualizations of each team's overall positioning on the field.
+            
+            **Metrics Compared:**
+            - Total Distance (m)
+            - Average Distance per Player (m)
+            - Total Sprints
+            - Average Sprints per Player
+            - Average Speed (m/s)
+            - Top Speed (m/s)
+            """)
+        
+        # Get all player metrics
+        player_metrics = st.session_state.analyzer.analyze_all_players()
+        
+        # Separate into teams
+        team1_players = [p for p in player_metrics if p['team_id'] == 1]
+        team2_players = [p for p in player_metrics if p['team_id'] == 2]
+        
+        # Check if both teams have players
+        if not team1_players or not team2_players:
+            st.error("Data must include players from both teams.")
+            return
+        
+        # Compute aggregate metrics
+        total_distance_team1 = sum(p['total_distance'] for p in team1_players)
+        total_distance_team2 = sum(p['total_distance'] for p in team2_players)
+        avg_distance_team1 = np.mean([p['total_distance'] for p in team1_players])
+        avg_distance_team2 = np.mean([p['total_distance'] for p in team2_players])
+        total_sprints_team1 = sum(p['total_sprints'] for p in team1_players)
+        total_sprints_team2 = sum(p['total_sprints'] for p in team2_players)
+        avg_sprints_team1 = np.mean([p['total_sprints'] for p in team1_players])
+        avg_sprints_team2 = np.mean([p['total_sprints'] for p in team2_players])
+        avg_speed_team1 = np.mean([p['avg_speed'] for p in team1_players])
+        avg_speed_team2 = np.mean([p['avg_speed'] for p in team2_players])
+        top_speed_team1 = max(p['top_speed'] for p in team1_players)
+        top_speed_team2 = max(p['top_speed'] for p in team2_players)
+        
+        # Create metrics DataFrame
+        metrics_df = pd.DataFrame({
+            'Metric': ['Total Distance (m)', 'Avg Distance per Player (m)', 'Total Sprints', 
+                       'Avg Sprints per Player', 'Avg Speed (m/s)', 'Top Speed (m/s)'],
+            'Team 1': [total_distance_team1, avg_distance_team1, total_sprints_team1, 
+                       avg_sprints_team1, avg_speed_team1, top_speed_team1],
+            'Team 2': [total_distance_team2, avg_distance_team2, total_sprints_team2, 
+                       avg_sprints_team2, avg_speed_team2, top_speed_team2]
+        })
+        
+        # Round the values
+        metrics_df['Team 1'] = metrics_df['Team 1'].round(2)
+        metrics_df['Team 2'] = metrics_df['Team 2'].round(2)
+        
+        # Display team info
+        st.markdown("### Team Overview")
+        st.write(f"Team 1: {len(team1_players)} players")
+        st.write(f"Team 2: {len(team2_players)} players")
+        
+        # Display aggregate metrics
+        st.markdown("### Aggregate Team Metrics")
+        st.write("This table shows the overall performance metrics for each team.")
+        st.dataframe(metrics_df)
+        st.markdown(get_download_link(metrics_df, "team_metrics.csv", "Download Team Metrics CSV"), unsafe_allow_html=True)
+        
+        # Create box plots
+        st.markdown("### Player Metric Distributions")
+        st.write("These box plots compare the distribution of individual player metrics between the two teams.")
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        metrics_to_plot = ['total_distance', 'avg_speed', 'total_sprints']
+        titles = ['Total Distance (m)', 'Average Speed (m/s)', 'Total Sprints']
+        for ax, metric, title in zip(axes, metrics_to_plot, titles):
+            team1_data = [p[metric] for p in team1_players]
+            team2_data = [p[metric] for p in team2_players]
+            ax.boxplot([team1_data, team2_data], labels=['Team 1', 'Team 2'])
+            ax.set_title(title)
+            ax.set_ylabel(title)
+        plt.tight_layout()
+        st.pyplot(fig)
+        
+        # Create heatmaps
+        st.markdown("### Team Position Heatmaps")
+        st.write("These heatmaps show the overall positioning of each team on the field based on all players' GPS data.")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Team 1 Position Heatmap")
+            team1_positions = st.session_state.analyzer.data[
+                st.session_state.analyzer.data['team_id'] == 1][['lat', 'lon']].values
+            fig_team1 = plt.figure(figsize=(8, 6))
+            ax = fig_team1.add_subplot(111)
+            st.session_state.analyzer._plot_heatmap(ax, team1_positions)
+            st.pyplot(fig_team1)
+        with col2:
+            st.subheader("Team 2 Position Heatmap")
+            team2_positions = st.session_state.analyzer.data[
+                st.session_state.analyzer.data['team_id'] == 2][['lat', 'lon']].values
+            fig_team2 = plt.figure(figsize=(8, 6))
+            ax = fig_team2.add_subplot(111)
+            st.session_state.analyzer._plot_heatmap(ax, team2_positions)
+            st.pyplot(fig_team2)
 
 if __name__ == '__main__':
     main()
